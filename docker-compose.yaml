@@ -1,0 +1,9 @@
+services:
+  bot:
+    build:
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./database/database.db:/app/database/database.db
+      - ./media:/app/media
