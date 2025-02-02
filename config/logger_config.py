@@ -66,6 +66,6 @@ def admin_action_logger(func):
                 f"Admin {message.from_user.username}:{message.chat.id} ({user.admin_level}) "
                 f"executed {func.__name__} with message: {message.text}"
             )
-            return await func(message, state, *args, **kwargs)
+        return await func(message, state, *args, **kwargs)
 
     return wrapper

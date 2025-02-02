@@ -135,7 +135,7 @@ async def make_sale(message: Message, state: FSMContext):
     Запрос у пользователя номера телефона клиента.
     """
     await message.answer(
-        text="Введите номер телефона клиента:\nПример: +79161231212",
+        text="Введите номер телефона клиента:\nПример: 79161231212",
         reply_markup=cancel_kb(),
     )
     await state.set_state(AdminStates.sale)
@@ -318,7 +318,7 @@ async def check_user_reports(message: Message, state: FSMContext) -> None:
         text=f"{user_report.report_text}\n\nПользователь: {user.first_name}\n"
         f"{user.username}:{user.chat_id}\n"
         f"Номер телефона: {user.phone_number}\n"
-        f"Дата создания: {user_report.created_at}\n",
+        f"Дата создания: {user_report.created_at.strftime('%d.%m.%Y %H:%M')}\n",
         reply_markup=check_report_kb(),
     )
     await state.update_data(user_report=user_report)
@@ -415,11 +415,11 @@ async def check_user_orders(message: Message, state: FSMContext) -> None:
     await message.answer(
         text=f"Заказ: {user_order.info_order}\n\n"
         f"Пользователь: {user.first_name}\n"
-        f"{user.username}: {user.chat_id}\n"
+        f"@{user.username}: {user.chat_id}\n"
         f"Тип заказа: {user_order.type_order}\n"
         f"Номер телефона: {user.phone_number}\n"
         f"Автомобиль: {car_info}\n"
-        f"Дата создания: {user_order.created_at}\n",
+        f"Дата создания: {user_order.created_at.strftime('%d.%m.%Y %H:%M')}\n",
         reply_markup=check_order_kb(),
     )
 

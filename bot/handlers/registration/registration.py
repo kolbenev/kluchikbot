@@ -102,11 +102,10 @@ async def finish_registration(message: Message, state: FSMContext):
     """
 
     if message.contact:
-        user_phone = message.contact.phone_number
+        user_phone = message.contact.phone_number.lstrip('+')
     else:
         await message.answer(text=error_phone)
         time.sleep(3)
-        await message.delete()
         return
 
     user = await registration_new_user(
@@ -121,6 +120,4 @@ async def finish_registration(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove(),
     )
     time.sleep(3)
-    await message.delete()
-    await answer_for_message.delete()
     await main_menu(message, state)
