@@ -58,15 +58,22 @@ async def registration_new_user(
 
 
 async def make_new_car(
-    chat_id: int, info_about_car: str, user_id: int, session: AsyncSession
+    chat_id: int,
+    user_id: int,
+    car_brand: str,
+    car_model: str,
+    car_year: str,
+    session: AsyncSession,
 ) -> CarUser:
     """
-    Создание новой машины для пользователя.
+    Функция для создания новой модели авто-пользователя.
     """
     new_car = CarUser(
         chat_id=chat_id,
-        info_about_car=info_about_car,
         user_id=user_id,
+        car_brand=car_brand,
+        car_model=car_model,
+        car_year=car_year,
     )
     session.add(new_car)
     await session.commit()

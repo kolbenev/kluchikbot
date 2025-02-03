@@ -13,6 +13,9 @@ class OrdersStates(StatesGroup):
     get_info_about_order = State()
     get_photo = State()
     get_info_about_car = State()
+    get_info_about_model_car = State()
+    get_info_about_brand_car = State()
+    get_info_about_year_car = State()
 
 
 class ReportStates(StatesGroup):
@@ -20,6 +23,11 @@ class ReportStates(StatesGroup):
 
 
 class AdminStates(StatesGroup):
+    select_car_brand = State()
+    broadcast_text = State()
+    broadcast_photo = State()
+    broadcast_type = State()
+    select_brand_for_count = State()
     bid_admin_login = State()
     admin_login = State()
     sale = State()

@@ -102,7 +102,7 @@ async def finish_registration(message: Message, state: FSMContext):
     """
 
     if message.contact:
-        user_phone = message.contact.phone_number.lstrip('+')
+        user_phone = message.contact.phone_number.lstrip("+")
     else:
         await message.answer(text=error_phone)
         time.sleep(3)

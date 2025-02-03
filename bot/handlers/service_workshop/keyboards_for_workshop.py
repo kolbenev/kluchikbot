@@ -48,6 +48,12 @@ def main_menu_workshop_kb() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
+                text="📟 Ключ по замку (ЧПУ)",
+                callback_data="key_the_on_CNU",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text="⬅ Вернутся назад",
                 callback_data="main_menu",
             )

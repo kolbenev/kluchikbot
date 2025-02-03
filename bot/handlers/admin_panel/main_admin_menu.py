@@ -7,8 +7,8 @@ import os
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardRemove, FSInputFile
-from sqlalchemy import select
+from aiogram.types import Message, ReplyKeyboardRemove, FSInputFile, InputFile
+from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 
 from bot.handlers.admin_panel.kb_for_admin import (
@@ -16,8 +16,10 @@ from bot.handlers.admin_panel.kb_for_admin import (
     main_menu_admin_kb,
     check_report_kb,
     check_order_kb,
+    admin_kb,
 )
 from bot.handlers.main_menu.main_menu import main_menu
+from bot.handlers.make_orders.kb_for_orders import brand_car_kb
 from bot.utils.decorators import is_admin
 from bot.utils.states import AdminStates
 from bot.utils.work_with_db import (
@@ -29,7 +31,7 @@ from bot.utils.work_with_db import (
 from config.load_env import BIG_ADMIN_PASSWORD, ADMIN_PASSWORD
 from config.logger_config import logger, admin_action_logger
 from database.confdb import session
-from database.models import User, Report, Order
+from database.models import User, Report, Order, CarUser
 
 router = Router()
 
@@ -42,6 +44,7 @@ router = Router()
 /bigadminlogin
 /adminlogin
 """
+
 
 @router.message(Command("bigadminlogin"))
 async def big_boss_login(message: Message, state: FSMContext):
@@ -125,6 +128,8 @@ async def check_admin_pass(message: Message, state: FSMContext):
 """
 Логика обработки команды /sale
 """
+
+
 @router.message(Command("sale"))
 @is_admin
 @admin_action_logger
@@ -172,12 +177,12 @@ async def make_sale_process(message: Message, state: FSMContext):
 Клиент:
 {client.first_name}, @{client.username}, {client.phone_number}
 
-Текущий баланс бонусов: {client.count_bonuses}
+Текущая сумма покупок: {client.amount_purchases}
 
 Выберите действие:
-1. Добавить бонусы
-2. Снять бонусы
-"""
+1. Зафиксировать цену покупки.
+2. Убрать у клиента сумму.
+""",
     )
     await state.update_data(client=client)
     await state.set_state(AdminStates.select_bonus_action)
@@ -196,8 +201,8 @@ async def select_bonus_action(message: Message, state: FSMContext):
 
     if message.text not in ["1", "2"]:
         await message.answer(
-            text="Пожалуйста, выберите действие: 1 для добавления бонусов, 2 для снятия.",
-            reply_markup=cancel_kb()
+            text="Пожалуйста, выберите действие: 1 для добавления суммы, 2 для снятия.",
+            reply_markup=cancel_kb(),
         )
         return
 
@@ -205,7 +210,7 @@ async def select_bonus_action(message: Message, state: FSMContext):
     await state.update_data(action=action)
 
     await message.answer(
-        text=f"Введите количество бонусов, которые будут {'добавлены' if action == 'add' else 'сняты'}:"
+        text=f"Введите сумму заказа, которая будет {'добавлена' if action == 'add' else 'снята'}:"
     )
     await state.set_state(AdminStates.accrue_bonuses)
 
@@ -237,13 +242,13 @@ async def accrue_or_remove_bonuses(message: Message, state: FSMContext):
         return
 
     if action == "add":
-        client.count_bonuses += bonus_amount
+        client.amount_purchases += bonus_amount
         await message.answer(
             text=f"Пользователю {client.first_name} добавлено {bonus_amount} баллов.",
             reply_markup=ReplyKeyboardRemove(),
         )
     elif action == "remove":
-        client.count_bonuses = max(0, client.count_bonuses - bonus_amount)
+        client.amount_purchases = max(0, client.amount_purchases - bonus_amount)
         await message.answer(
             text=f"У пользователя {client.first_name} снято {bonus_amount} баллов.",
             reply_markup=ReplyKeyboardRemove(),
@@ -254,11 +259,11 @@ async def accrue_or_remove_bonuses(message: Message, state: FSMContext):
     await state.set_state(AdminStates.sale)
 
 
-
 # ======================================================================================================================
 """
 Работа кнопок администраторов и выдача клавиатуры администратора -> /admin
 """
+
 
 @router.message(Command("admin"))
 @is_admin
@@ -388,6 +393,7 @@ async def report_for_user(message: Message, state: FSMContext, bot: Bot) -> None
 Логика работы режима обработки заказов.
 """
 
+
 @router.message(F.text == "Меню обработки заказов")
 @is_admin
 @admin_action_logger
@@ -410,7 +416,7 @@ async def check_user_orders(message: Message, state: FSMContext) -> None:
         return
 
     user = user_order.user
-    car_info = user_order.car.info_about_car if user_order.car else "Без авто"
+    car_info = user_order.car if user_order.car else None
 
     await message.answer(
         text=f"Заказ: {user_order.info_order}\n\n"
@@ -418,7 +424,8 @@ async def check_user_orders(message: Message, state: FSMContext) -> None:
         f"@{user.username}: {user.chat_id}\n"
         f"Тип заказа: {user_order.type_order}\n"
         f"Номер телефона: {user.phone_number}\n"
-        f"Автомобиль: {car_info}\n"
+        f"Автомобиль: {f"{car_info.car_brand} {car_info.car_model} "
+                       f"{car_info.car_year}" if user_order.car else "Без авто"}\n"
         f"Дата создания: {user_order.created_at.strftime('%d.%m.%Y %H:%M')}\n",
         reply_markup=check_order_kb(),
     )
@@ -495,6 +502,7 @@ async def order_for_user(message: Message, state: FSMContext, bot: Bot) -> None:
     await state.clear()
     return await check_user_orders(message, state)
 
+
 # ======================================================================================================================
 """
 Команды старшего администратора
@@ -503,6 +511,20 @@ async def order_for_user(message: Message, state: FSMContext, bot: Bot) -> None:
 /make_sending_with_photo
 /deleteadmin
 """
+
+
+@router.message(Command("bigadmin"))
+@is_admin
+async def send_admin_keyboard(message: Message, state: FSMContext):
+    """
+    Отправляет клавиатуру старшему администратору.
+    """
+    user: User = await get_user_by_chat_id(chat_id=message.chat.id, session=session)
+    if user.admin_level != 1:
+        await message.answer("Ваш уровень не позволяет пользоваться этой командой.")
+        return
+    await message.answer("Панель управления:", reply_markup=admin_kb)
+
 
 @router.message(F.text == "/make_sending")
 @is_admin
@@ -531,7 +553,7 @@ async def handle_sending(message: Message, state: FSMContext, bot: Bot):
     """
 
     if message.text == "Отмена":
-        await message.answer("Рассылка отменена.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Рассылка отменена.", reply_markup=admin_kb)
         await state.clear()
         return
 
@@ -543,9 +565,13 @@ async def handle_sending(message: Message, state: FSMContext, bot: Bot):
         try:
             await bot.send_message(user.chat_id, message.text)
         except Exception as e:
-            logger.warning(f"Не удалось отправить сообщение пользователю {user.chat_id}: {e}")
+            logger.warning(
+                f"Не удалось отправить сообщение пользователю {user.chat_id}: {e}"
+            )
 
-    await message.answer("Сообщение отправлено всем пользователям.", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        "Сообщение отправлено всем пользователям.", reply_markup=admin_kb
+    )
     await state.clear()
 
 
@@ -563,7 +589,9 @@ async def make_sending_with_photo(message: Message, state: FSMContext):
         await message.answer("Ваш уровень не позволяет пользоваться этой командой.")
         return
 
-    await message.answer("Отправьте фото и текст для рассылки", reply_markup=cancel_kb())
+    await message.answer(
+        "Отправьте фото и текст для рассылки", reply_markup=cancel_kb()
+    )
     await state.set_state(AdminStates.sending_photo)
 
 
@@ -576,7 +604,7 @@ async def handle_sending_photo(message: Message, state: FSMContext, bot: Bot):
     """
 
     if message.text == "Отмена":
-        await message.answer("Рассылка отменена.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Рассылка отменена.", reply_markup=admin_kb)
         await state.clear()
         return
 
@@ -591,11 +619,18 @@ async def handle_sending_photo(message: Message, state: FSMContext, bot: Bot):
 
     for user in users:
         try:
-            await bot.send_photo(user.chat_id, message.photo[-1].file_id, caption=message.caption)
+            await bot.send_photo(
+                user.chat_id, message.photo[-1].file_id, caption=message.caption
+            )
         except Exception as e:
-            logger.warning(f"Не удалось отправить сообщение пользователю {user.chat_id}: {e}")
+            logger.warning(
+                f"Не удалось отправить сообщение пользователю {user.chat_id}: {e}"
+            )
 
-    await message.answer("Фото с сообщением отправлены всем пользователям.", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        "Фото с сообщением отправлены всем пользователям.",
+        reply_markup=admin_kb,
+    )
     await state.clear()
 
 
@@ -612,7 +647,10 @@ async def delete_admin(message: Message, state: FSMContext):
         await message.answer("Ваш уровень не позволяет пользоваться этой командой.")
         return
 
-    await message.answer("Введите логин администратора, которого вы хотите понизить.")
+    await message.answer(
+        "Введите логин администратора, которого вы хотите понизить.",
+        reply_markup=admin_kb,
+    )
     await state.set_state(AdminStates.delete_admin)
 
 
@@ -637,7 +675,10 @@ async def handle_delete_admin(message: Message, state: FSMContext):
     admin_to_demote.admin_level = 0
     await session.commit()
 
-    await message.answer(f"Права администратора @{admin_to_demote.username} были понижены.", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        f"Права администратора @{admin_to_demote.username} были понижены.",
+        reply_markup=admin_kb,
+    )
     await state.clear()
 
 
@@ -659,6 +700,115 @@ async def get_admin_log(message: Message, state: FSMContext):
         document = FSInputFile(LOG_FILE_PATH)
         await message.answer_document(document=document)
     else:
+        await message.answer(text="Ошибка: файл логов не найден.")
+
+
+@router.message(F.text == "Количество пользователей")
+@is_admin
+async def get_total_users(message: Message, state: FSMContext):
+    """
+    Выводит общее количество пользователей.
+    """
+    user: User = await get_user_by_chat_id(chat_id=message.chat.id, session=session)
+    if user.admin_level != 1:
+        await message.answer("Ваш уровень не позволяет пользоваться этой командой.")
+        return
+
+    stmt = select(func.count()).select_from(User)
+    result = await session.execute(stmt)
+    total_users = result.scalar()
+
+    await message.answer(f"Всего пользователей: {total_users}")
+
+
+@router.message(F.text == "Количество пользователей с маркой авто")
+@is_admin
+async def get_users_by_car_brand(message: Message, state: FSMContext):
+
+    user: User = await get_user_by_chat_id(chat_id=message.chat.id, session=session)
+    if user.admin_level != 1:
+        await message.answer("Ваш уровень не позволяет пользоваться этой командой.")
+        return
+    await message.answer("Выберите марку автомобиля:", reply_markup=brand_car_kb())
+    await state.set_state(AdminStates.select_brand_for_count)
+
+
+@router.message(AdminStates.select_brand_for_count)
+@is_admin
+async def show_users_by_car_brand(message: Message, state: FSMContext):
+    """
+    Выводит количество пользователей с указанной маркой авто.
+    """
+    brand = message.text
+
+    stmt = select(func.count()).select_from(CarUser).where(CarUser.car_brand == brand)
+    result = await session.execute(stmt)
+    count = result.scalar()
+
+    if count == 0:
         await message.answer(
-            text="Ошибка: файл логов не найден."
+            "Пользователей с такой маркой авто не найдено.", reply_markup=admin_kb
         )
+        return
+
+    await message.answer(
+        f"Пользователей с маркой {brand}: {count}", reply_markup=admin_kb
+    )
+    await state.clear()
+
+
+@router.message(F.text == "Сделать рассылку по авто")
+async def start_broadcast(message: Message, state: FSMContext):
+    """
+    Старт рассылки: выбор марки авто.
+    """
+    await message.answer("Выберите марку автомобиля:", reply_markup=brand_car_kb())
+    await state.set_state(AdminStates.select_car_brand)
+
+
+@router.message(AdminStates.select_car_brand)
+@is_admin
+async def select_car_brand(message: Message, state: FSMContext):
+    """
+    Сохранение выбранной марки авто и запрос на ввод текста рассылки.
+    """
+    selected_brand = message.text
+
+    stmt = select(User).join(CarUser).where(CarUser.car_brand == selected_brand)
+    result = await session.execute(stmt)
+    users = result.scalars().all()
+
+    if not users:
+        await message.answer(
+            f"Нет пользователей с автомобилем {selected_brand}.", reply_markup=admin_kb
+        )
+        await state.clear()
+        return
+
+    await state.update_data(selected_brand=selected_brand, users=users)
+    await message.answer(f"Введите текст рассылки для владельцев {selected_brand}:")
+    await state.set_state(AdminStates.broadcast_text)
+
+
+@router.message(AdminStates.broadcast_text)
+@is_admin
+async def enter_broadcast_text(message: Message, state: FSMContext):
+    """
+    Сохранение текста рассылки и отправка.
+    """
+    data = await state.get_data()
+    users = data["users"]
+    text = message.text
+
+    count_sent = 0
+    for user in users:
+        try:
+            await message.bot.send_message(chat_id=user.chat_id, text=text)
+            count_sent += 1
+        except Exception as e:
+            print(f"Ошибка отправки пользователю {user.chat_id}: {e}")
+
+    await message.answer(
+        f"Рассылка завершена. Отправлено {count_sent} сообщений.", reply_markup=admin_kb
+    )
+    await state.clear()

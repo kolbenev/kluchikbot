@@ -27,7 +27,7 @@ class User(Base):
     chat_id = Column(BigInteger)
     first_name = Column(String)
     username = Column(String)
-    count_bonuses = Column(Integer, default=0)
+    amount_purchases = Column(Integer, default=0)
     level = Column(Integer, default=0)
     phone_number = Column(String(20))
     is_admin = Column(Boolean, default=False)
@@ -41,8 +41,10 @@ class CarUser(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     chat_id = Column(BigInteger)
-    info_about_car = Column(String)
     user_id = Column(Integer, ForeignKey("users.id"))
+    car_brand = Column(String)
+    car_model = Column(String)
+    car_year = Column(String)
 
 
 class Order(Base):

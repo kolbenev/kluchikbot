@@ -58,8 +58,7 @@ def admin_action_logger(func):
 
     @wraps(func)
     async def wrapper(message: Message, state: FSMContext, *args, **kwargs):
-        user: (
-            User) = await get_user_by_chat_id(chat_id=message.chat.id, session=session)
+        user: User = await get_user_by_chat_id(chat_id=message.chat.id, session=session)
 
         if user.admin_level == 0:
             admin_logger.info(

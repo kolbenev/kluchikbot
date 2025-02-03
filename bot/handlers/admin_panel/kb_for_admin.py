@@ -60,3 +60,17 @@ def check_order_kb() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
     )
     return keyboard
+
+
+admin_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Количество пользователей")],
+        [KeyboardButton(text="Количество пользователей с маркой авто")],
+        [KeyboardButton(text="Сделать рассылку по авто")],
+        [KeyboardButton(text="/make_sending")],
+        [KeyboardButton(text="/make_sending_with_photo")],
+        [KeyboardButton(text="/deleteadmin")],
+        [KeyboardButton(text="/getadminlog")],
+    ],
+    resize_keyboard=True,
+)

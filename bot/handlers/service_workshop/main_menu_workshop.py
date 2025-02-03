@@ -20,6 +20,7 @@ from bot.handlers.service_workshop.text_for_message_workshop import (
     text_for_soldering,
     text_for_immobilizer,
     text_keys_for_home,
+    text_for_CPU,
 )
 
 
@@ -112,3 +113,15 @@ async def immobilizer_handler(callback_query: CallbackQuery, state: FSMContext):
         text=text_for_immobilizer, reply_markup=leave_an_application_with_car()
     )
     await state.update_data(order_type="Калибровка иммобилайзера")
+
+
+@router.callback_query(lambda c: c.data == "key_the_on_CNU")
+async def key_CNU_handler(callback_query: CallbackQuery, state: FSMContext):
+    """
+    Ключ по замку (ЧПУ)
+    """
+    await callback_query.message.edit_text(
+        text=text_for_CPU,
+        reply_markup=leave_an_application_with_car(),
+    )
+    await state.update_data(order_type="Ключ по замку (ЧПУ)")

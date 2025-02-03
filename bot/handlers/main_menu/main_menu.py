@@ -15,7 +15,8 @@ from bot.handlers.main_menu.messages_for_main_menu import (
     text_for_section_contacts,
     text_for_discounts,
     text_for_report_from_user,
-    text_for_successful_send_report, get_bonuses_text,
+    text_for_successful_send_report,
+    get_bonuses_text,
 )
 from bot.utils.keyboards import go_back_kb
 from bot.utils.states import ReportStates
@@ -65,7 +66,9 @@ async def get_contacts(callback_query: CallbackQuery, state: FSMContext):
     """
     Открытие раздела бонусов и отображение текущего баланса и уровня пользователя.
     """
-    user: User = await get_user_by_chat_id(chat_id=callback_query.from_user.id, session=session)
+    user: User = await get_user_by_chat_id(
+        chat_id=callback_query.from_user.id, session=session
+    )
 
     if user is None:
         await callback_query.message.edit_text(
@@ -97,7 +100,7 @@ async def get_text_for_report(callback_query: CallbackQuery, state: FSMContext):
     """
     Открытия раздела связь с администрацией.
     """
-    await callback_query.message.answer(
+    await callback_query.message.edit_text(
         text=text_for_report_from_user,
         reply_markup=go_back_kb(callback_data="main_menu"),
     )

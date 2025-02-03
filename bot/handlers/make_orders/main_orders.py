@@ -3,22 +3,31 @@
 """
 
 import os
+import re
 import time
 
 from aiogram import F, Bot
 from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
+from sqlalchemy import select
 
 from bot.handlers.main_menu.main_menu import main_menu
-from bot.handlers.make_orders.kb_for_orders import stage_photo, button_with_car_user
+from bot.handlers.make_orders.kb_for_orders import (
+    stage_photo,
+    button_with_car_user,
+    brand_car_kb,
+    model_car_kb,
+)
 from bot.handlers.make_orders.messages_for_orders import (
     send_photo_please,
     get_info_about_order,
     successful_order,
     choice_your_car_or_add_new,
     accepted_information_about_car_go_to_order,
-    text_get_info_about_car,
+    get_text_about_brand_car,
+    get_text_about_model_car,
+    get_text_about_year_car,
 )
 from bot.utils.keyboards import go_back_kb
 from bot.utils.states import OrdersStates
@@ -30,6 +39,7 @@ from bot.utils.work_with_db import (
 )
 from database.confdb import session
 from database.models import User, CarUser
+
 
 router = Router()
 
@@ -45,6 +55,7 @@ async def make_order_without_car(
     await callback_query.message.answer(
         text=get_info_about_order, reply_markup=go_back_kb(callback_data="main_menu")
     )
+
     await state.update_data(car_id=None)
     await state.set_state(OrdersStates.get_info_about_order)
 
@@ -61,16 +72,22 @@ async def make_order_with_car(
         chat_id=callback_query.message.chat.id,
         session=session,
     )
+    await state.update_data(user=user)
+    data = await state.get_data()
+    type_order = data["order_type"]
+
     if user.cars:
         await callback_query.message.answer(
             text=choice_your_car_or_add_new,
-            reply_markup=button_with_car_user(cars=user.cars),
+            reply_markup=button_with_car_user(user.cars),
         )
         await state.set_state(OrdersStates.get_info_about_car)
         return
 
+    # Тут первый запрос авто.
+    # Запрос у пользователя марки авто.
     await callback_query.message.answer(
-        text=text_get_info_about_car, reply_markup=go_back_kb(callback_data="main_menu")
+        text=get_text_about_brand_car, reply_markup=brand_car_kb()
     )
     await state.set_state(OrdersStates.get_info_about_car)
 
@@ -80,26 +97,84 @@ async def get_info_about_car(message: Message, state: FSMContext):
     """
     Функция для получения информации об авто пользователя.
     """
-    user: User = await get_user_with_car_by_chat_id(
-        chat_id=message.chat.id, session=session
+    data = await state.get_data()
+    user = data["user"]
+    car = next(
+        (
+            car
+            for car in user.cars
+            if f"{car.car_brand} {car.car_model} {car.car_year}" == message.text
+        ),
+        None,
     )
-    car = next((car for car in user.cars if car.info_about_car == message.text), None)
 
-    if car is None:
-        car = await make_new_car(
-            chat_id=message.chat.id,
-            info_about_car=message.text,
-            user_id=user.id,
-            session=session,
+    if car:
+        # Если машина найдена отправляем сразу на оформление заказа.
+        await state.update_data(car_id=car.id)
+        await message.answer(
+            text=accepted_information_about_car_go_to_order,
+            reply_markup=ReplyKeyboardRemove(),
         )
+        await state.set_state(OrdersStates.get_info_about_order)
+        return
+
+    if message.text == "➕ Добавить новое авто":
+        await message.answer(text=get_text_about_brand_car, reply_markup=brand_car_kb())
+        return
+
+    await message.answer(
+        text=get_text_about_model_car,
+        reply_markup=model_car_kb(message.text),
+    )
+
+    await state.update_data(car_brand=message.text)
+    await state.set_state(OrdersStates.get_info_about_model_car)
+
+
+@router.message(OrdersStates.get_info_about_model_car)
+async def take_info_about_model_car(message: Message, state: FSMContext):
+    """
+    Функция для принятия модели авто и запроса года.
+    """
+    await message.answer(
+        text=get_text_about_year_car, reply_markup=ReplyKeyboardRemove()
+    )
+    await state.update_data(car_model=message.text)
+    await state.set_state(OrdersStates.get_info_about_year_car)
+
+
+@router.message(OrdersStates.get_info_about_year_car)
+async def take_year_car(message: Message, state: FSMContext):
+    """
+    Функция для принятия года авто пользователя.
+    И создания модели авто в бд.
+    """
+    is_year = bool(re.match(r"^\d{4}$", message.text))
+
+    if not is_year:
+        await message.answer(text="Вы ввели некорректный год, попробуйте еще раз.")
+        return
+
+    data = await state.get_data()
+    car_model = data["car_model"]
+    car_brand = data["car_brand"]
+    user = data["user"]
+    year = message.text
+
+    car = await make_new_car(
+        car_model=car_model,
+        car_brand=car_brand,
+        car_year=year,
+        chat_id=message.chat.id,
+        user_id=user.id,
+        session=session,
+    )
 
     await message.answer(
         text=accepted_information_about_car_go_to_order,
-        reply_markup=ReplyKeyboardRemove(),
     )
 
     await state.update_data(car_id=car.id)
-    await state.update_data(user=user)
     await state.set_state(OrdersStates.get_info_about_order)
 
 
@@ -117,6 +192,18 @@ async def get_info_about_order_from_user(
         reply_markup=stage_photo(),
     )
     await state.set_state(OrdersStates.get_photo)
+
+
+async def notify_admin_on_new_order(bot: Bot):
+    stmt = select(User).filter(User.admin_level == 0, User.is_admin == True)
+    result = await session.execute(stmt)
+    admins = result.scalars().all()
+
+    for admin in admins:
+        message = (
+            "🚨 Новый заказ был сделан! Пожалуйста, проверьте административную панель."
+        )
+        await bot.send_message(admin.chat_id, message)
 
 
 @router.message(F.photo and OrdersStates.get_photo)
@@ -148,6 +235,7 @@ async def get_photo_from_user(message: Message, state: FSMContext, bot: Bot):
     )
 
     await message.answer(text=successful_order)
+    await notify_admin_on_new_order(bot)
     time.sleep(3)
     await main_menu(
         message=message,
@@ -159,6 +247,7 @@ async def get_photo_from_user(message: Message, state: FSMContext, bot: Bot):
 async def make_order_without_photo(
     callback_query: CallbackQuery,
     state: FSMContext,
+    bot: Bot,
 ):
     """
     Создание заказа если пользователь не отправил фото.
@@ -168,7 +257,7 @@ async def make_order_without_photo(
     info_about_order = data["info_about_order"]
     chat_id = callback_query.message.chat.id
     car_id = data["car_id"]
-    user = await get_user_by_chat_id(chat_id=callback_query.message.chat.id, session=session)
+    user = await get_user_by_chat_id(chat_id=chat_id, session=session)
 
     await make_order(
         chat_id=chat_id,
@@ -181,6 +270,7 @@ async def make_order_without_photo(
     )
 
     await callback_query.message.answer(text=successful_order)
+    await notify_admin_on_new_order(bot)
     time.sleep(3)
     await main_menu(
         message=callback_query.message,
