@@ -256,7 +256,6 @@ async def accrue_or_remove_bonuses(message: Message, state: FSMContext):
 
     await session.commit()
     await state.clear()
-    await state.set_state(AdminStates.sale)
 
 
 # ======================================================================================================================
