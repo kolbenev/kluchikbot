@@ -245,13 +245,13 @@ async def accrue_or_remove_bonuses(message: Message, state: FSMContext):
         client.amount_purchases += bonus_amount
         await message.answer(
             text=f"Пользователю {client.first_name} добавлено {bonus_amount} баллов.",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=main_menu_admin_kb(),
         )
     elif action == "remove":
         client.amount_purchases = max(0, client.amount_purchases - bonus_amount)
         await message.answer(
             text=f"У пользователя {client.first_name} снято {bonus_amount} баллов.",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=main_menu_admin_kb(),
         )
 
     await session.commit()
