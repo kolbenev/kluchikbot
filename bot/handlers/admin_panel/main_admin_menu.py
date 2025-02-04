@@ -295,7 +295,6 @@ async def get_count_report(message: Message, state: FSMContext):
 Логика работы меню режима ответов на сообщения
 """
 
-
 @router.message(F.text == "Меню ответов на сообщения")
 @is_admin
 @admin_action_logger
@@ -320,7 +319,7 @@ async def check_user_reports(message: Message, state: FSMContext) -> None:
     user = user_report.user
     await message.answer(
         text=f"{user_report.report_text}\n\nПользователь: {user.first_name}\n"
-        f"{user.username}:{user.chat_id}\n"
+        f"Логин: @{user.username}\n"
         f"Номер телефона: {user.phone_number}\n"
         f"Дата создания: {user_report.created_at.strftime('%d.%m.%Y %H:%M')}\n",
         reply_markup=check_report_kb(),
